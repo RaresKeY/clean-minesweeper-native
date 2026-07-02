@@ -2,13 +2,13 @@
 
 A tiny native Minesweeper game with both graphical and terminal modes.
 
-No browser and no web UI. The graphical mode uses SDL2 and small BMP assets. Terminal mode can be built without SDL2.
+No browser and no web UI. The graphical mode uses SDL2 and bundled BMP assets. Terminal mode can be built without SDL2.
 
 ## Gameplay
 
 Clean Mines is a local native Minesweeper game. The first reveal is safe, empty areas flood open, numbered cells show adjacent mine counts, flags mark suspected mines, and chording a revealed number opens its surrounding cells when the flag count matches.
 
-The SDL graphical mode is the default when SDL2 support is built in. It opens in dark mode by default and includes an in-window `Menu` button for board size, difficulty, theme, touch flag mode, and reset.
+The SDL graphical mode is the default when SDL2 support is built in. It opens in dark mode by default, uses fixed 32x32 tile cells, and includes an in-window `Menu` button for board size, difficulty, theme, touch flag mode, and reset.
 
 Preset boards are split into size levels and mine difficulty:
 

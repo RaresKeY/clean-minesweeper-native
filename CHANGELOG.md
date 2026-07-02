@@ -2,6 +2,12 @@
 
 All notable changes to Clean Mines are documented here.
 
+## 0.1.1 - 2026-07-02
+
+- Reworked SDL rendering to use fixed 32x32 full-cell BMP assets for flags, wrong flags, mines, and hit mines.
+- Removed the old separate marker BMP fallback assets, including the question marker asset.
+- Preserved the fixed-size SDL board while centering header counters, menu rows, and cell number rendering.
+
 ## 0.1.0 - 2026-07-02
 
 - Added a native Minesweeper engine with first-click-safe board generation, reveal flood-fill, flagging, chording, win/loss state, and built-in self-tests.

@@ -1223,11 +1223,10 @@ typedef struct {
     SDL_Texture *tile_closed;
     SDL_Texture *tile_open;
     SDL_Texture *tile_pressed;
-    SDL_Texture *flag;
-    SDL_Texture *mine;
-    SDL_Texture *mine_hit;
-    SDL_Texture *question;
-    SDL_Texture *wrong_flag;
+    SDL_Texture *closed_flag[2];
+    SDL_Texture *closed_wrong_flag[2];
+    SDL_Texture *open_mine[2];
+    SDL_Texture *open_mine_hit[2];
 } Textures;
 
 typedef struct {
@@ -1251,7 +1250,6 @@ typedef struct {
     Color tile_closed;
     Color tile_open;
     Color tile_pressed;
-    Color marker;
     Color numbers[9];
 } GraphicsTheme;
 
@@ -1263,14 +1261,29 @@ typedef enum {
     MENU_THEME
 } MenuState;
 
+typedef struct {
+    RectI board;
+    int tile_size;
+    int ui_scale;
+    int board_pad;
+    int header_height;
+} GraphicsLayout;
+
 static const int TILE_SIZE = 32;
-static const int BOARD_PAD = 12;
-static const int HEADER_HEIGHT = 58;
-static const int MENU_BUTTON_WIDTH = 76;
-static const int MENU_BUTTON_HEIGHT = 30;
-static const int MENU_PANEL_WIDTH = 184;
-static const int MENU_PANEL_PAD = 6;
-static const int MENU_ROW_HEIGHT = 30;
+static const int UI_SCALE = 2;
+static const int BASE_BOARD_PAD = 6;
+static const int BASE_HEADER_HEIGHT = 29;
+static const int BASE_COUNTER_X = 7;
+static const int BASE_COUNTER_Y = 7;
+static const int BASE_COUNTER_WIDTH = 48;
+static const int BASE_COUNTER_HEIGHT = 15;
+static const int BASE_COUNTER_GAP = 7;
+static const int BASE_MENU_BUTTON_WIDTH = 38;
+static const int BASE_MENU_BUTTON_HEIGHT = 15;
+static const int BASE_MENU_PANEL_WIDTH = 92;
+static const int BASE_MENU_PANEL_PAD = 3;
+static const int BASE_MENU_ROW_HEIGHT = 15;
+static const int BASE_MENU_TEXT_X = 5;
 
 static const GraphicsTheme GRAPHICS_THEMES[2] = {
     {
@@ -1278,7 +1291,6 @@ static const GraphicsTheme GRAPHICS_THEMES[2] = {
         {255, 255, 255},
         {36, 43, 43},
         {208, 138, 36},
-        {255, 255, 255},
         {255, 255, 255},
         {255, 255, 255},
         {255, 255, 255},
@@ -1302,7 +1314,6 @@ static const GraphicsTheme GRAPHICS_THEMES[2] = {
         {108, 132, 126},
         {112, 104, 88},
         {100, 92, 78},
-        {255, 255, 255},
         {
             {219, 226, 223},
             {91, 158, 255},
@@ -1331,7 +1342,7 @@ static int build_path(char *out, size_t out_size, const char *base, const char *
 }
 
 static SDL_Texture *try_load_bmp_texture(SDL_Renderer *renderer, const char *dir,
-                                         const char *name, int color_key) {
+                                         const char *name) {
     char path[512];
     if (dir == NULL || dir[0] == '\0' || !build_path(path, sizeof(path), dir, name)) {
         return NULL;
@@ -1341,17 +1352,14 @@ static SDL_Texture *try_load_bmp_texture(SDL_Renderer *renderer, const char *dir
     if (surface == NULL) {
         return NULL;
     }
-    if (color_key) {
-        SDL_SetColorKey(surface, SDL_TRUE, SDL_MapRGB(surface->format, 255, 0, 255));
-    }
     SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, surface);
     SDL_FreeSurface(surface);
     return texture;
 }
 
-static SDL_Texture *load_bmp_texture(SDL_Renderer *renderer, const char *name, int color_key) {
+static SDL_Texture *load_bmp_texture(SDL_Renderer *renderer, const char *name) {
     const char *env_dir = getenv("CLEAN_MINES_ASSET_DIR");
-    SDL_Texture *texture = try_load_bmp_texture(renderer, env_dir, name, color_key);
+    SDL_Texture *texture = try_load_bmp_texture(renderer, env_dir, name);
     if (texture != NULL) {
         return texture;
     }
@@ -1362,7 +1370,7 @@ static SDL_Texture *load_bmp_texture(SDL_Renderer *renderer, const char *name, i
         char exe_relative[512];
         int written = snprintf(exe_relative, sizeof(exe_relative), "%s../share/clean-mines/assets", base_path);
         if (written > 0 && (size_t)written < sizeof(exe_relative)) {
-            texture = try_load_bmp_texture(renderer, exe_relative, name, color_key);
+            texture = try_load_bmp_texture(renderer, exe_relative, name);
         }
         SDL_free(base_path);
         if (texture != NULL) {
@@ -1380,7 +1388,7 @@ static SDL_Texture *load_bmp_texture(SDL_Renderer *renderer, const char *name, i
     };
 
     for (int i = 0; dirs[i] != NULL; i++) {
-        texture = try_load_bmp_texture(renderer, dirs[i], name, color_key);
+        texture = try_load_bmp_texture(renderer, dirs[i], name);
         if (texture != NULL) {
             return texture;
         }
@@ -1390,33 +1398,52 @@ static SDL_Texture *load_bmp_texture(SDL_Renderer *renderer, const char *name, i
     return NULL;
 }
 
+static void destroy_texture_pair(SDL_Texture *textures[2]) {
+    SDL_DestroyTexture(textures[THEME_LIGHT]);
+    SDL_DestroyTexture(textures[THEME_DARK]);
+}
+
 static void destroy_textures(Textures *textures) {
     SDL_DestroyTexture(textures->tile_closed);
     SDL_DestroyTexture(textures->tile_open);
     SDL_DestroyTexture(textures->tile_pressed);
-    SDL_DestroyTexture(textures->flag);
-    SDL_DestroyTexture(textures->mine);
-    SDL_DestroyTexture(textures->mine_hit);
-    SDL_DestroyTexture(textures->question);
-    SDL_DestroyTexture(textures->wrong_flag);
+    destroy_texture_pair(textures->closed_flag);
+    destroy_texture_pair(textures->closed_wrong_flag);
+    destroy_texture_pair(textures->open_mine);
+    destroy_texture_pair(textures->open_mine_hit);
     memset(textures, 0, sizeof(*textures));
+}
+
+static int load_texture_pair(SDL_Renderer *renderer, SDL_Texture *textures[2],
+                             const char *light_name, const char *dark_name) {
+    textures[THEME_LIGHT] = load_bmp_texture(renderer, light_name);
+    textures[THEME_DARK] = load_bmp_texture(renderer, dark_name);
+    return textures[THEME_LIGHT] != NULL && textures[THEME_DARK] != NULL;
 }
 
 static int load_textures(SDL_Renderer *renderer, Textures *textures) {
     memset(textures, 0, sizeof(*textures));
-    textures->tile_closed = load_bmp_texture(renderer, "tile-closed.bmp", 0);
-    textures->tile_open = load_bmp_texture(renderer, "tile-open.bmp", 0);
-    textures->tile_pressed = load_bmp_texture(renderer, "tile-pressed.bmp", 0);
-    textures->flag = load_bmp_texture(renderer, "flag.bmp", 1);
-    textures->mine = load_bmp_texture(renderer, "mine.bmp", 1);
-    textures->mine_hit = load_bmp_texture(renderer, "mine-hit.bmp", 1);
-    textures->question = load_bmp_texture(renderer, "question.bmp", 1);
-    textures->wrong_flag = load_bmp_texture(renderer, "wrong-flag.bmp", 1);
+    textures->tile_closed = load_bmp_texture(renderer, "tile-closed.bmp");
+    textures->tile_open = load_bmp_texture(renderer, "tile-open.bmp");
+    textures->tile_pressed = load_bmp_texture(renderer, "tile-pressed.bmp");
 
-    if (textures->tile_closed == NULL || textures->tile_open == NULL ||
-        textures->tile_pressed == NULL || textures->flag == NULL ||
-        textures->mine == NULL || textures->mine_hit == NULL ||
-        textures->question == NULL || textures->wrong_flag == NULL) {
+    int ok = textures->tile_closed != NULL &&
+             textures->tile_open != NULL &&
+             textures->tile_pressed != NULL &&
+             load_texture_pair(renderer, textures->closed_flag,
+                               "tile-closed-flag-light.bmp",
+                               "tile-closed-flag-dark.bmp") &&
+             load_texture_pair(renderer, textures->closed_wrong_flag,
+                               "tile-closed-wrong-flag-light.bmp",
+                               "tile-closed-wrong-flag-dark.bmp") &&
+             load_texture_pair(renderer, textures->open_mine,
+                               "tile-open-mine-light.bmp",
+                               "tile-open-mine-dark.bmp") &&
+             load_texture_pair(renderer, textures->open_mine_hit,
+                               "tile-open-mine-hit-light.bmp",
+                               "tile-open-mine-hit-dark.bmp");
+
+    if (!ok) {
         destroy_textures(textures);
         return 0;
     }
@@ -1429,21 +1456,46 @@ static void set_texture_color(SDL_Texture *texture, Color color) {
     }
 }
 
+static void set_texture_pair_color(SDL_Texture *textures[2], Color color) {
+    set_texture_color(textures[THEME_LIGHT], color);
+    set_texture_color(textures[THEME_DARK], color);
+}
+
 static void apply_texture_theme(Textures *textures, ThemeMode theme_mode) {
     const GraphicsTheme *theme = graphics_theme(theme_mode);
+    Color white = {255, 255, 255};
     set_texture_color(textures->tile_closed, theme->tile_closed);
     set_texture_color(textures->tile_open, theme->tile_open);
     set_texture_color(textures->tile_pressed, theme->tile_pressed);
-    set_texture_color(textures->flag, theme->marker);
-    set_texture_color(textures->mine, theme->marker);
-    set_texture_color(textures->mine_hit, theme->marker);
-    set_texture_color(textures->question, theme->marker);
-    set_texture_color(textures->wrong_flag, theme->marker);
+    set_texture_pair_color(textures->closed_flag, white);
+    set_texture_pair_color(textures->closed_wrong_flag, white);
+    set_texture_pair_color(textures->open_mine, white);
+    set_texture_pair_color(textures->open_mine_hit, white);
 }
 
-static void window_size_for_game(const Game *game, int *width, int *height) {
-    *width = game->width * TILE_SIZE + BOARD_PAD * 2;
-    *height = game->height * TILE_SIZE + HEADER_HEIGHT + BOARD_PAD;
+static int scaled_ui(int base_value, int ui_scale) {
+    return base_value * ui_scale;
+}
+
+static int minimum_header_width(int ui_scale) {
+    return scaled_ui(BASE_COUNTER_X + BASE_COUNTER_WIDTH + BASE_COUNTER_GAP +
+                         BASE_COUNTER_WIDTH + BASE_COUNTER_GAP +
+                         BASE_MENU_BUTTON_WIDTH + BASE_BOARD_PAD,
+                     ui_scale);
+}
+
+static void window_size_for_game(const Game *game, SDL_Window *window, int *width, int *height) {
+    (void)window;
+    int tile_size = TILE_SIZE;
+    int ui_scale = UI_SCALE;
+    int board_pad = scaled_ui(BASE_BOARD_PAD, ui_scale);
+    int header_height = scaled_ui(BASE_HEADER_HEIGHT, ui_scale);
+
+    *width = game->width * tile_size + board_pad * 2;
+    if (*width < minimum_header_width(ui_scale)) {
+        *width = minimum_header_width(ui_scale);
+    }
+    *height = game->height * tile_size + header_height + board_pad;
 }
 
 static const char *status_name(GameStatus status) {
@@ -1635,6 +1687,13 @@ static void draw_text_centered(SDL_Renderer *renderer, const char *text, RectI r
     draw_text(renderer, text, x, y, scale, color);
 }
 
+static void draw_text_left_centered(SDL_Renderer *renderer, const char *text, RectI rect,
+                                    int x, int scale, Color color) {
+    int height = 7 * scale;
+    int y = rect.y + (rect.height - height) / 2;
+    draw_text(renderer, text, x, y, scale, color);
+}
+
 static void set_number_color(SDL_Renderer *renderer, int value, const GraphicsTheme *theme) {
     int index = value < 0 ? 0 : value;
     if (index > 8) {
@@ -1672,20 +1731,57 @@ static void draw_int(SDL_Renderer *renderer, int value, int x, int y, int scale)
     }
 }
 
-static void draw_cell_number(SDL_Renderer *renderer, int value, int x, int y,
-                             const GraphicsTheme *theme) {
-    set_number_color(renderer, value, theme);
-    draw_glyph(renderer, value, x + 10, y + 7, 4);
+static int int_width(int value, int scale) {
+    char text[16];
+    int count = snprintf(text, sizeof(text), "%d", value);
+    if (count <= 0) {
+        return 0;
+    }
+    return (count * 4 - 1) * scale;
 }
 
-static RectI menu_button_rect(int window_width) {
+static void draw_int_centered(SDL_Renderer *renderer, int value, RectI rect, int scale) {
+    int width = int_width(value, scale);
+    int height = 5 * scale;
+    int x = rect.x + (rect.width - width) / 2;
+    int y = rect.y + (rect.height - height) / 2;
+    draw_int(renderer, value, x, y, scale);
+}
+
+static void draw_cell_number(SDL_Renderer *renderer, int value, SDL_Rect dst,
+                             const GraphicsTheme *theme) {
+    int scale = dst.w / 8;
+    if (scale < 1) {
+        scale = 1;
+    }
+    int glyph_w = 3 * scale;
+    int glyph_h = 5 * scale;
+    set_number_color(renderer, value, theme);
+    draw_glyph(renderer, value, dst.x + (dst.w - glyph_w) / 2,
+               dst.y + (dst.h - glyph_h) / 2, scale);
+}
+
+static RectI counter_rect(const GraphicsLayout *layout, int index) {
     RectI rect;
-    rect.x = window_width - BOARD_PAD - MENU_BUTTON_WIDTH;
-    rect.y = 14;
-    rect.width = MENU_BUTTON_WIDTH;
-    rect.height = MENU_BUTTON_HEIGHT;
-    if (rect.x < BOARD_PAD) {
-        rect.x = BOARD_PAD;
+    rect.x = scaled_ui(BASE_COUNTER_X, layout->ui_scale);
+    if (index > 0) {
+        rect.x += scaled_ui(BASE_COUNTER_WIDTH + BASE_COUNTER_GAP, layout->ui_scale);
+    }
+    rect.y = scaled_ui(BASE_COUNTER_Y, layout->ui_scale);
+    rect.width = scaled_ui(BASE_COUNTER_WIDTH, layout->ui_scale);
+    rect.height = scaled_ui(BASE_COUNTER_HEIGHT, layout->ui_scale);
+    return rect;
+}
+
+static RectI menu_button_rect(const GraphicsLayout *layout, int window_width) {
+    RectI rect;
+    rect.x = window_width - layout->board_pad -
+             scaled_ui(BASE_MENU_BUTTON_WIDTH, layout->ui_scale);
+    rect.y = scaled_ui(BASE_COUNTER_Y, layout->ui_scale);
+    rect.width = scaled_ui(BASE_MENU_BUTTON_WIDTH, layout->ui_scale);
+    rect.height = scaled_ui(BASE_MENU_BUTTON_HEIGHT, layout->ui_scale);
+    if (rect.x < layout->board_pad) {
+        rect.x = layout->board_pad;
     }
     return rect;
 }
@@ -1703,30 +1799,35 @@ static int menu_row_count(MenuState state) {
     return 0;
 }
 
-static RectI menu_panel_rect(int window_width, MenuState state) {
+static RectI menu_panel_rect(const GraphicsLayout *layout, int window_width, MenuState state) {
     RectI rect;
     int rows = menu_row_count(state);
-    rect.width = MENU_PANEL_WIDTH;
-    rect.height = rows * MENU_ROW_HEIGHT + MENU_PANEL_PAD * 2;
-    rect.x = window_width - BOARD_PAD - rect.width;
-    rect.y = HEADER_HEIGHT - 2;
-    if (rect.x < BOARD_PAD) {
-        rect.x = BOARD_PAD;
+    int panel_pad = scaled_ui(BASE_MENU_PANEL_PAD, layout->ui_scale);
+    int row_height = scaled_ui(BASE_MENU_ROW_HEIGHT, layout->ui_scale);
+    rect.width = scaled_ui(BASE_MENU_PANEL_WIDTH, layout->ui_scale);
+    rect.height = rows * row_height + panel_pad * 2;
+    rect.x = window_width - layout->board_pad - rect.width;
+    rect.y = layout->header_height - layout->ui_scale;
+    if (rect.x < layout->board_pad) {
+        rect.x = layout->board_pad;
     }
     return rect;
 }
 
-static int menu_row_at(MenuState state, int window_width, int px, int py) {
-    RectI panel = menu_panel_rect(window_width, state);
+static int menu_row_at(MenuState state, const GraphicsLayout *layout,
+                       int window_width, int px, int py) {
+    RectI panel = menu_panel_rect(layout, window_width, state);
     int rows = menu_row_count(state);
+    int panel_pad = scaled_ui(BASE_MENU_PANEL_PAD, layout->ui_scale);
+    int row_height = scaled_ui(BASE_MENU_ROW_HEIGHT, layout->ui_scale);
     if (!point_in_rect(panel, px, py)) {
         return -1;
     }
-    int local_y = py - panel.y - MENU_PANEL_PAD;
+    int local_y = py - panel.y - panel_pad;
     if (local_y < 0) {
         return -1;
     }
-    int row = local_y / MENU_ROW_HEIGHT;
+    int row = local_y / row_height;
     if (row < 0 || row >= rows) {
         return -1;
     }
@@ -1791,7 +1892,7 @@ static void set_menu_state(MenuState *menu_state, int *menu_focus, MenuState nex
 
 static void render_menu(SDL_Renderer *renderer, const BoardSelection *selection,
                         ThemeMode theme_mode, MenuState menu_state, int menu_focus,
-                        int flag_mode, int window_width) {
+                        int flag_mode, int window_width, const GraphicsLayout *layout) {
     const GraphicsTheme *theme = graphics_theme(theme_mode);
     Color button_text = {255, 255, 255};
     Color panel = make_color(250, 252, 249);
@@ -1806,26 +1907,28 @@ static void render_menu(SDL_Renderer *renderer, const BoardSelection *selection,
         focus_soft = make_color(58, 68, 65);
     }
 
-    RectI button = menu_button_rect(window_width);
+    RectI button = menu_button_rect(layout, window_width);
     fill_rect_color(renderer, button, theme->counter);
     outline_rect_color(renderer, button, menu_state == MENU_CLOSED ? border : theme->focus);
-    draw_text_centered(renderer, "MENU", button, 2, button_text);
+    draw_text_centered(renderer, "MENU", button, layout->ui_scale, button_text);
 
     if (menu_state == MENU_CLOSED) {
         return;
     }
 
-    RectI menu = menu_panel_rect(window_width, menu_state);
+    RectI menu = menu_panel_rect(layout, window_width, menu_state);
     fill_rect_color(renderer, menu, panel);
     outline_rect_color(renderer, menu, border);
 
     int rows = menu_row_count(menu_state);
+    int panel_pad = scaled_ui(BASE_MENU_PANEL_PAD, layout->ui_scale);
+    int row_height = scaled_ui(BASE_MENU_ROW_HEIGHT, layout->ui_scale);
     for (int row = 0; row < rows; row++) {
         RectI row_rect;
-        row_rect.x = menu.x + MENU_PANEL_PAD;
-        row_rect.y = menu.y + MENU_PANEL_PAD + row * MENU_ROW_HEIGHT;
-        row_rect.width = menu.width - MENU_PANEL_PAD * 2;
-        row_rect.height = MENU_ROW_HEIGHT;
+        row_rect.x = menu.x + panel_pad;
+        row_rect.y = menu.y + panel_pad + row * row_height;
+        row_rect.width = menu.width - panel_pad * 2;
+        row_rect.height = row_height;
 
         int active = menu_row_active(menu_state, row, selection, theme_mode, flag_mode);
         if (active) {
@@ -1839,33 +1942,55 @@ static void render_menu(SDL_Renderer *renderer, const BoardSelection *selection,
 
         char label[32];
         menu_row_label(menu_state, row, flag_mode, label, sizeof(label));
-        draw_text(renderer, label, row_rect.x + 9, row_rect.y + 8, 2,
-                  active ? selected_text : text);
+        draw_text_left_centered(renderer, label, row_rect,
+                                row_rect.x + scaled_ui(BASE_MENU_TEXT_X, layout->ui_scale),
+                                layout->ui_scale, active ? selected_text : text);
     }
 }
 
-static RectI board_rect(void) {
-    RectI rect;
-    rect.x = BOARD_PAD;
-    rect.y = HEADER_HEIGHT;
-    rect.width = 0;
-    rect.height = 0;
-    return rect;
+static void graphics_layout(const Game *game, int window_width, int window_height,
+                            GraphicsLayout *layout) {
+    int tile_size = TILE_SIZE;
+    int ui_scale = UI_SCALE;
+    int board_pad = scaled_ui(BASE_BOARD_PAD, ui_scale);
+    int header_height = scaled_ui(BASE_HEADER_HEIGHT, ui_scale);
+    int available_height = window_height - header_height - board_pad;
+
+    layout->tile_size = tile_size;
+    layout->ui_scale = ui_scale;
+    layout->board_pad = board_pad;
+    layout->header_height = header_height;
+    layout->board.width = game->width * tile_size;
+    layout->board.height = game->height * tile_size;
+    layout->board.x = (window_width - layout->board.width) / 2;
+    layout->board.y = header_height + (available_height - layout->board.height) / 2;
+    if (layout->board.x < board_pad) {
+        layout->board.x = board_pad;
+    }
+    if (layout->board.y < header_height) {
+        layout->board.y = header_height;
+    }
 }
 
-static int cell_from_point(const Game *game, int px, int py, int *x, int *y) {
-    RectI board = board_rect();
-    int local_x = px - board.x;
-    int local_y = py - board.y;
+static int cell_from_point(const Game *game, int window_width, int window_height,
+                           int px, int py, int *x, int *y) {
+    GraphicsLayout layout;
+    graphics_layout(game, window_width, window_height, &layout);
+    int local_x = px - layout.board.x;
+    int local_y = py - layout.board.y;
     if (local_x < 0 || local_y < 0) {
         return 0;
     }
-    *x = local_x / TILE_SIZE;
-    *y = local_y / TILE_SIZE;
+    *x = local_x / layout.tile_size;
+    *y = local_y / layout.tile_size;
     return in_bounds(game, *x, *y);
 }
 
-static void render_graphics(SDL_Renderer *renderer, const Textures *textures,
+static SDL_Texture *themed_texture(SDL_Texture *const textures[2], ThemeMode theme_mode) {
+    return textures[theme_mode == THEME_DARK ? THEME_DARK : THEME_LIGHT];
+}
+
+static void render_graphics(SDL_Window *window, SDL_Renderer *renderer, const Textures *textures,
                             const Game *game, const BoardSelection *selection,
                             int focus_x, int focus_y, ThemeMode theme_mode,
                             MenuState menu_state, int menu_focus, int flag_mode) {
@@ -1876,45 +2001,64 @@ static void render_graphics(SDL_Renderer *renderer, const Textures *textures,
 
     int width = 0;
     int height = 0;
-    window_size_for_game(game, &width, &height);
-    fill_rect(renderer, 0, 0, width, HEADER_HEIGHT, theme->header.r, theme->header.g, theme->header.b);
-    fill_rect(renderer, 14, 14, 96, 30, theme->counter.r, theme->counter.g, theme->counter.b);
-    fill_rect(renderer, 124, 14, 96, 30, theme->counter.r, theme->counter.g, theme->counter.b);
-    set_number_color(renderer, 1, theme);
-    draw_int(renderer, game->mines - count_flags(game), 30, 20, 4);
-    draw_int(renderer, game->status == GAME_WON ? 1 : game->status == GAME_LOST ? -1 : 0, 140, 20, 4);
+    SDL_GetWindowSize(window, &width, &height);
+    GraphicsLayout layout;
+    graphics_layout(game, width, height, &layout);
 
-    RectI board = board_rect();
+    fill_rect(renderer, 0, 0, width, layout.header_height,
+              theme->header.r, theme->header.g, theme->header.b);
+
+    RectI mines_counter = counter_rect(&layout, 0);
+    RectI state_counter = counter_rect(&layout, 1);
+    fill_rect_color(renderer, mines_counter, theme->counter);
+    fill_rect_color(renderer, state_counter, theme->counter);
+    set_number_color(renderer, 1, theme);
+    draw_int_centered(renderer, game->mines - count_flags(game),
+                      mines_counter, layout.ui_scale * 2);
+    draw_int_centered(renderer, game->status == GAME_WON ? 1 : game->status == GAME_LOST ? -1 : 0,
+                      state_counter, layout.ui_scale * 2);
+
     for (int y = 0; y < game->height; y++) {
         for (int x = 0; x < game->width; x++) {
             const Cell *cell = const_cell_at(game, x, y);
             SDL_Rect dst;
-            dst.x = board.x + x * TILE_SIZE;
-            dst.y = board.y + y * TILE_SIZE;
-            dst.w = TILE_SIZE;
-            dst.h = TILE_SIZE;
+            dst.x = layout.board.x + x * layout.tile_size;
+            dst.y = layout.board.y + y * layout.tile_size;
+            dst.w = layout.tile_size;
+            dst.h = layout.tile_size;
 
-            SDL_Texture *base = cell->revealed ? textures->tile_open : textures->tile_closed;
-            SDL_RenderCopy(renderer, base, NULL, &dst);
-
+            SDL_Texture *cell_texture = NULL;
             if (game->status == GAME_LOST && cell->wrong) {
-                SDL_RenderCopy(renderer, textures->wrong_flag, NULL, &dst);
+                cell_texture = themed_texture(textures->closed_wrong_flag, theme_mode);
             } else if (!cell->revealed && cell->flagged) {
-                SDL_RenderCopy(renderer, textures->flag, NULL, &dst);
+                cell_texture = themed_texture(textures->closed_flag, theme_mode);
             } else if (cell->revealed && cell->mine) {
-                SDL_RenderCopy(renderer, cell->hit ? textures->mine_hit : textures->mine, NULL, &dst);
-            } else if (cell->revealed && cell->adjacent > 0) {
-                draw_cell_number(renderer, cell->adjacent, dst.x, dst.y, theme);
+                cell_texture = themed_texture(cell->hit ? textures->open_mine_hit : textures->open_mine,
+                                              theme_mode);
+            }
+
+            if (cell_texture != NULL) {
+                SDL_RenderCopy(renderer, cell_texture, NULL, &dst);
+            } else {
+                SDL_Texture *base = cell->revealed ? textures->tile_open : textures->tile_closed;
+                SDL_RenderCopy(renderer, base, NULL, &dst);
+            }
+
+            if (!cell->mine && cell->revealed && cell->adjacent > 0) {
+                draw_cell_number(renderer, cell->adjacent, dst, theme);
             }
         }
     }
 
     if (in_bounds(game, focus_x, focus_y)) {
-        outline_rect(renderer, board.x + focus_x * TILE_SIZE + 1, board.y + focus_y * TILE_SIZE + 1,
-                     TILE_SIZE - 2, TILE_SIZE - 2, theme->focus.r, theme->focus.g, theme->focus.b);
+        outline_rect(renderer, layout.board.x + focus_x * layout.tile_size + 1,
+                     layout.board.y + focus_y * layout.tile_size + 1,
+                     layout.tile_size - 2, layout.tile_size - 2,
+                     theme->focus.r, theme->focus.g, theme->focus.b);
     }
 
-    render_menu(renderer, selection, theme_mode, menu_state, menu_focus, flag_mode, width);
+    render_menu(renderer, selection, theme_mode, menu_state, menu_focus, flag_mode,
+                width, &layout);
     SDL_RenderPresent(renderer);
 }
 
@@ -1926,7 +2070,7 @@ static void reset_graphics_game(Game *game, SDL_Window *window, const BoardSelec
     *focus_y = 0;
     int width = 0;
     int height = 0;
-    window_size_for_game(game, &width, &height);
+    window_size_for_game(game, window, &width, &height);
     SDL_SetWindowSize(window, width, height);
     update_window_title(window, game, selection, theme);
 }
@@ -1999,9 +2143,10 @@ static void handle_graphics_pointer(Game *game, SDL_Window *window, Textures *te
     int window_width = 0;
     int window_height = 0;
     SDL_GetWindowSize(window, &window_width, &window_height);
-    (void)window_height;
+    GraphicsLayout layout;
+    graphics_layout(game, window_width, window_height, &layout);
 
-    if (button == SDL_BUTTON_LEFT && point_in_rect(menu_button_rect(window_width), px, py)) {
+    if (button == SDL_BUTTON_LEFT && point_in_rect(menu_button_rect(&layout, window_width), px, py)) {
         set_menu_state(menu_state, menu_focus,
                        *menu_state == MENU_CLOSED ? MENU_ROOT : MENU_CLOSED);
         return;
@@ -2009,7 +2154,7 @@ static void handle_graphics_pointer(Game *game, SDL_Window *window, Textures *te
 
     if (*menu_state != MENU_CLOSED) {
         if (button == SDL_BUTTON_LEFT) {
-            int row = menu_row_at(*menu_state, window_width, px, py);
+            int row = menu_row_at(*menu_state, &layout, window_width, px, py);
             if (row >= 0) {
                 *menu_focus = row;
                 invoke_graphics_menu_row(game, window, textures, selection, seed, theme,
@@ -2023,7 +2168,7 @@ static void handle_graphics_pointer(Game *game, SDL_Window *window, Textures *te
 
     int x = 0;
     int y = 0;
-    if (cell_from_point(game, px, py, &x, &y)) {
+    if (cell_from_point(game, window_width, window_height, px, py, &x, &y)) {
         *focus_x = x;
         *focus_y = y;
         if (button == SDL_BUTTON_RIGHT || *flag_mode) {
@@ -2040,22 +2185,23 @@ static int run_graphics(BoardSelection selection, uint32_t seed, ThemeMode theme
         fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
         return 1;
     }
+    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
 
     Game game;
     game_init(&game, selection.config.width, selection.config.height, selection.config.mines, seed);
     int win_w = 0;
     int win_h = 0;
-    window_size_for_game(&game, &win_w, &win_h);
+    window_size_for_game(&game, NULL, &win_w, &win_h);
 
     SDL_Window *window = SDL_CreateWindow(APP_NAME, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-                                          win_w, win_h, SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI);
+                                          win_w, win_h,
+                                          SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI);
     if (window == NULL) {
         fprintf(stderr, "SDL_CreateWindow failed: %s\n", SDL_GetError());
         game_free(&game);
         SDL_Quit();
         return 1;
     }
-
     SDL_Renderer *renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (renderer == NULL) {
         renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
@@ -2179,7 +2325,7 @@ static int run_graphics(BoardSelection selection, uint32_t seed, ThemeMode theme
             }
         }
 
-        render_graphics(renderer, &textures, &game, &selection, focus_x, focus_y, theme,
+        render_graphics(window, renderer, &textures, &game, &selection, focus_x, focus_y, theme,
                         menu_state, menu_focus, flag_mode);
         SDL_Delay(16);
     }
