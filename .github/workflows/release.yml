@@ -1,0 +1,126 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x64
+            runner: ubuntu-24.04
+            archive: clean-mines-linux-x64.tar.gz
+            triplet: ""
+          - name: linux-arm64
+            runner: ubuntu-24.04-arm
+            archive: clean-mines-linux-arm64.tar.gz
+            triplet: ""
+          - name: windows-x64
+            runner: windows-2025
+            archive: clean-mines-windows-x64.zip
+            triplet: x64-windows-static
+          - name: windows-arm64
+            runner: windows-11-arm
+            archive: clean-mines-windows-arm64.zip
+            triplet: arm64-windows-static
+          - name: macos-intel
+            runner: macos-15-intel
+            archive: clean-mines-macos-intel.tar.gz
+            triplet: ""
+          - name: macos-arm64
+            runner: macos-15
+            archive: clean-mines-macos-arm64.tar.gz
+            triplet: ""
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install SDL2 on Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsdl2-dev
+
+      - name: Install SDL2 on macOS
+        if: runner.os == 'macOS'
+        run: brew install sdl2
+
+      - name: Install SDL2 on Windows
+        if: runner.os == 'Windows'
+        run: vcpkg install sdl2:${{ matrix.triplet }}
+
+      - name: Configure
+        shell: bash
+        run: |
+          args=(-S . -B build -DCMAKE_BUILD_TYPE=Release -DCLEAN_MINES_REQUIRE_SDL=ON)
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            args+=("-DCMAKE_TOOLCHAIN_FILE=$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake")
+            args+=("-DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }}")
+          fi
+          cmake "${args[@]}"
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Test
+        run: ctest --test-dir build --build-config Release --output-on-failure
+
+      - name: Install staged files
+        run: cmake --install build --config Release --prefix stage
+
+      - name: Package archive
+        shell: bash
+        run: |
+          cd stage
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            cmake -E tar cf "../${{ matrix.archive }}" --format=zip .
+          else
+            cmake -E tar czf "../${{ matrix.archive }}" --format=gnutar .
+          fi
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.archive }}
+          path: ${{ matrix.archive }}
+          if-no-files-found: error
+
+  publish-release:
+    name: publish-release
+    runs-on: ubuntu-24.04
+    needs: build-release
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          notes_file="CHANGELOG.md"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" dist/* --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$tag" dist/* \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$tag" \
+              --notes-file "$notes_file" \
+              --verify-tag
+          fi

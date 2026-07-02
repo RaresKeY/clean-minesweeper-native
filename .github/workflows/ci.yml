@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  native-build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x64
+            runner: ubuntu-24.04
+            artifact: clean-mines-linux-x64
+            exe: build/clean-mines
+            triplet: ""
+          - name: linux-arm64
+            runner: ubuntu-24.04-arm
+            artifact: clean-mines-linux-arm64
+            exe: build/clean-mines
+            triplet: ""
+          - name: windows-x64
+            runner: windows-2025
+            artifact: clean-mines-windows-x64
+            exe: build/Release/clean-mines.exe
+            triplet: x64-windows-static
+          - name: windows-arm64
+            runner: windows-11-arm
+            artifact: clean-mines-windows-arm64
+            exe: build/Release/clean-mines.exe
+            triplet: arm64-windows-static
+          - name: macos-intel
+            runner: macos-15-intel
+            artifact: clean-mines-macos-intel
+            exe: build/clean-mines
+            triplet: ""
+          - name: macos-arm64
+            runner: macos-15
+            artifact: clean-mines-macos-arm64
+            exe: build/clean-mines
+            triplet: ""
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install SDL2 on Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsdl2-dev
+
+      - name: Install SDL2 on macOS
+        if: runner.os == 'macOS'
+        run: brew install sdl2
+
+      - name: Install SDL2 on Windows
+        if: runner.os == 'Windows'
+        run: vcpkg install sdl2:${{ matrix.triplet }}
+
+      - name: Configure
+        shell: bash
+        run: |
+          args=(-S . -B build -DCMAKE_BUILD_TYPE=Release -DCLEAN_MINES_REQUIRE_SDL=ON)
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            args+=("-DCMAKE_TOOLCHAIN_FILE=$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake")
+            args+=("-DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }}")
+          fi
+          cmake "${args[@]}"
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Test
+        run: ctest --test-dir build --build-config Release --output-on-failure
+
+      - name: Version smoke
+        run: cmake -E env ${{ matrix.exe }} --version
+
+      - name: Upload executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.exe }}
+          if-no-files-found: error

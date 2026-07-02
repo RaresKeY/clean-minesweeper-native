@@ -1,0 +1,149 @@
+.TH CLEAN-MINES 6 "2026-07-02" "clean-mines 0.1.0" "Games Manual"
+.SH NAME
+clean-mines \- tiny native Minesweeper game
+.SH SYNOPSIS
+.B clean-mines
+[\fB--graphics\fR]
+[\fB--terminal\fR]
+[\fB--commands\fR]
+[\fB--dark\fR]
+[\fB--light\fR]
+[\fB--theme\fR \fIlight|dark\fR]
+[\fB--level\fR \fIsmall|medium|large\fR]
+[\fB--difficulty\fR \fIeasy|normal|hard\fR]
+[\fB--width\fR \fIN\fR]
+[\fB--height\fR \fIN\fR]
+[\fB--mines\fR \fIN\fR]
+[\fB--seed\fR \fIN\fR]
+.br
+.B clean-mines
+\fB--self-test\fR
+.SH DESCRIPTION
+.B clean-mines
+is a tiny native Minesweeper game with graphical and terminal modes.
+The default mode is graphical when SDL2 support is built in.
+Graphical mode uses the dark theme by default.
+Terminal mode uses a full-screen arrow-key controller when stdin and stdout are TTYs.
+Line-command terminal mode is used automatically for pipes and can be forced with
+.B --commands.
+.SH OPTIONS
+.TP
+.B --graphics
+Run graphical mode.
+.TP
+.B --terminal
+Run terminal mode.
+.TP
+.B --commands
+Use line-command terminal mode.
+.TP
+.B --dark
+Use the dark graphical theme. This is the graphical default.
+.TP
+.B --light
+Use the light graphical theme.
+.TP
+.BI --theme " light|dark"
+Set the graphical theme.
+.TP
+.BI --level " small|medium|large"
+Set the preset board size level.
+.TP
+.BI --difficulty " easy|normal|hard"
+Set the preset mine difficulty within the size level.
+.TP
+.BI --width " N"
+Set the board width.
+.TP
+.BI --height " N"
+Set the board height.
+.TP
+.BI --mines " N"
+Set the mine count.
+.TP
+.BI --seed " N"
+Use a deterministic random seed.
+.TP
+.B --self-test
+Run built-in engine tests.
+.TP
+.B --help
+Show command help.
+.TP
+.B --version
+Show the program version.
+.SH CONTROLS
+Graphical mode supports left click or Space/Enter to reveal, right click or
+.B f
+to flag, arrow keys to move keyboard focus,
+.B Tab
+or
+.B o
+to open the graphical menu for size, difficulty, theme, flag mode, and reset,
+.B t
+to toggle light and dark themes,
+.B 1/s/b
+to select small size,
+.B 2/m/i
+to select medium size,
+.B 3/l/x
+to select large size,
+.B e/n/h
+to select easy, normal, or hard difficulty,
+.B r
+to restart, and
+.B q
+or Escape to quit.
+.PP
+Full-screen terminal mode supports arrow keys to move the flashing focused cell,
+Space/Enter to reveal,
+.B f
+to flag,
+.B c
+to chord,
+.B r
+to restart,
+.B ?
+to toggle help, and
+.B q
+or Escape to quit.
+.PP
+Line-command terminal mode supports:
+.TP
+.BI r " x y"
+Reveal a cell.
+.TP
+.BI f " x y"
+Flag or unflag a cell.
+.TP
+.BI c " x y"
+Chord a revealed numbered cell.
+.TP
+.B n
+Restart the current board.
+.TP
+.BI n " s h"
+Start a new board by size level and difficulty.
+.TP
+.BI s " m"
+Select a size level while keeping the current difficulty.
+.TP
+.BI d " e"
+Select a difficulty while keeping the current size level.
+.TP
+.B n b
+Start a small normal board.
+.TP
+.B n i
+Start a medium normal board.
+.TP
+.B n e
+Start a large normal board.
+.TP
+.B h
+Show in-game help.
+.TP
+.B q
+Quit.
+.SH AUTHOR
+RaresKeY
